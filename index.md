@@ -4,7 +4,9 @@
 
 Last time we showed off our updated `packh` and `packl` implementations. Since then, we've cleaned up our code and Dr. Cameron has added it to the main [icgrep svn repo](http://parabix.costar.sfu.ca/changeset/5931/icGREP/icgrep-devel).
 
-Unfortunately, our implementation currently only supports field widths of 16. Although luckily, icgrep seems to almost exclusively use field widths of 16, so it doesn't cause much of an issue.
+Unfortunately, our implementation currently only supports field widths of 16. Although this
+is sufficient for the current parabix transform algorithm, we would like to extend support to
+have a more complete implementation.
 
 Our existing algorithm can be extended to field widths of 32 and 64 with the following modifications:
 
@@ -51,7 +53,7 @@ switch (fw) {
 }
 ````
 
-We are currently looking into a possible algorithm for field widths of 8 although it has yet to produce results.
+We are currently looking into a possible algorithm for field widths of 8 although it has yet to yield results.
 
 ## The new stuff
 
@@ -73,7 +75,7 @@ We had concerns that llvm may not be using the most efficient implementation so 
 
 #### Possible improvements
 
-Unfortunately, [Intel's popcount Intrinsics](https://software.intel.com/sites/landingpage/IntrinsicsGuide/#text=pop) for AVX-512 require the (grossly named) AVX512VPOPCNTDQ feature set. For some reason, this feature isn't on any processors except one very specific specialty set called Knight's Landing. They're not expected to hit mainstream processors until Ice Lake, two generations from now.
+Unfortunately, [Intel's popcount Intrinsics](https://software.intel.com/sites/landingpage/IntrinsicsGuide/#text=pop) for AVX-512 require the (grossly named) AVX512VPOPCNTDQ feature set. For some reason, this feature isn't on any processors except one very specific specialty set called Knight's Landing. AVX512VPOPCNTDQ is not expected to hit mainstream processors until Ice Lake, two generations from now.
 
 Because of this, we chose to implement a [specific well-known algorithm](https://en.wikipedia.org/wiki/Hamming_weight#Efficient_implementation) for computing popcount:
 
@@ -123,8 +125,7 @@ Our initial testing has shown roughly 2% gains in performance.
 
 #### Further improvements
 
-This algorithm can be simply, albeit tediously, modified for vectors of i32's, i16's and i8's. This would make it an all-around more efficient version of the default IDISA implementation.
-***
+This algorithm can be simply, albeit tediously, modified for vectors of i32's, i16's and i8's. This would make it an all-around more efficient version of the LLVM implementation.
 
 ### Bitblock advance with carry
 
@@ -253,7 +254,7 @@ From there we decended to **Lust**. This is where the folly of man gets the best
 __m512i _mm512_srl_epi16 (__m512i a, __m128i count)
 Instruction: vpsrlw
 CPUID Flags: AVX512BW
-    
+
 Shift packed 16-bit integers in a right by count while shifting in zeros,
 and store the results in dst.
 ```
