@@ -10,7 +10,7 @@ Currently only supports field widths of 16.
 
 Existing algorithm can be extended to field widths of 32 and 64 with the following:
 
-````
+````cpp
 const unsigned int field_count_16 = 64;
 Constant * Idxs_16[field_count_16];
 for (unsigned int i = 0; i < field_count_16; i++) {
@@ -63,7 +63,7 @@ yet to produce results.
 
 Default implementation:
 
-````
+````cpp
 if (LLVM_UNLIKELY(fw < 8)) {
     assert ("field width is less than 8" && false);
     llvm::report_fatal_error("Unsupported field width: popcount " + std::to_string(fw));
@@ -79,7 +79,7 @@ We had concerns that llvm may not be using the most efficient implementation.
 
 [Solution we chose](https://en.wikipedia.org/wiki/Hamming_weight#Efficient_implementation)
 
-````
+````cpp
 llvm::Value * IDISA_AVX512BW_Builder::simd_popcount(unsigned fw, llvm::Value * a){
     if((fw == 64) && (mBitBlockWidth == 512)){
         Constant * m1Arr[8];
@@ -135,7 +135,7 @@ Long-stream addition (with carries) of 64 bit values.
 
 ##### Current algorithm
 
-```
+```cpp
 std::pair<Value *, Value *> IDISA_AVX2_Builder::bitblock_add_with_carry(Value * e1, Value * e2, Value * carryin) {
     // using LONG_ADD
     Type * carryTy = carryin->getType();
