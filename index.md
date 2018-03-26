@@ -242,7 +242,7 @@ So as you'd expect for a shifting operation, `bitblock_indexed_advance` makes a 
 
 ## The LLVM Chronicles Pt.2: The Nine Circles of HeLLVM
 
-What started as quick detour to implement a single instruction version of `simd_srli` has turned into incredible journey through the depths of HeLLVM to uncover the mystical processes behind intrinsic implementation. So without further ado, our decent through the **Nine Circles of HeLLVM** starts as any other story does: with a naive curiosity straying a little deeper than it should've...
+What started as quick detour to implement a single instruction version of `simd_srli` has turned into an incredible journey through the depths of HeLLVM to uncover the mystical processes behind intrinsic implementation. So without further ado, our decent through the **Nine Circles of HeLLVM** starts as any other story does: with naive curiosity finding something it shouldn't have...
 
 ***
 #### Limbo, The First Circle
