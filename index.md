@@ -124,14 +124,15 @@ Our initial testing has shown roughly 2% gains in performance.
 #### Further improvements
 
 This algorithm can be simply, albeit tediously, modified for vectors of i32's, i16's and i8's. This would make it an all-around more efficient version of the default IDISA implementation.
+***
 
 ### Bitblock advance with carry
 
 #### Purpose
 
-Long-stream addition (with carries) of 64 bit values.
+Efficiently computing long-stream addition (with carries) of 64 bit values.
 
-##### Current algorithm
+#### Current algorithm
 
 ```cpp
 std::pair<Value *, Value *> IDISA_AVX2_Builder::bitblock_add_with_carry(Value * e1, Value * e2, Value * carryin) {
@@ -159,17 +160,17 @@ std::pair<Value *, Value *> IDISA_AVX2_Builder::bitblock_add_with_carry(Value * 
 }
 ```
 
-##### Things to note
+#### Things to note
 
 - Many nested logical operations
 - Multiple layers of masks and bit manipulations
 
-##### Problems
+#### Problems
 
 - No equivalent AVX-512 intrinsics have been found
 - Field width is 64, but value size is not fixed
 
-##### Research
+#### Research
 
 Idea: Optimize performance for value sizes that are multiples of 512.
 
@@ -182,13 +183,59 @@ Logical simplifications:
 - ```_mm512_andnot_epi64``` can combine conjunction and negation
 - Masked add intrinsics
 
-##### Current work
+#### Current work
 
-In progress: implementing block-split algorithm and analyzing performance of intrinsic subtitutions.
+We're currently working on implementing a block-split algorithm and analyzing the performance of intrinsic substitutions.
 
-### The LLVM Chronicles Pt.2: The Nine Circles of HeLLVM
+***
 
-*Rant about the BS LLVM nonsense by Oscar*
+### Bitblock Indexed Advance
+
+#### What *is* it?
+
+So `bitblock_index_advance` is a pretty complicated operation actually. To explain it, I'm going to go up one level and explain the comparatively simple `bitblock_advance`.
+
+##### Bitblock advance
+
+The `bitblock` class of operations work by treating the entire vector register's bits as one single piece of data. Working from that, `bitblock_advance` is a reasonably simple shift operation. It works by shifting the entire vector register in one direction. The reason this is slightly complicated is due to needing to compute the carrying between fields.
+
+##### The real thing
+
+So now that you (hopefully) understand that, it's time to show you the real beast. For that, I'm going to be shamelessly stealing this diagram from Dr. Cameron.
+
+```
+Consider:  output = IndexedAdvance(stream, index, 3) where 3 is the shift amount
+
+stream:  xxxxAxxxxBxxxxxCxxxxDxxxExxxFxxxG    (x's are don't care bits)
+index:   ....1....1.....1....1...1...1...1    (. indicates a 0 bit)
+
+output:  ....................A...B...C...D
+
+if this is a single bitblock, the carryout value is the set of 3 bits EFG
+
+For the next block
+
+stream:  xxxHxxxJxxxKxxxxxxLxxxMxxxxxxNxxx
+index:   ...1...1...1......1...1......1...
+output:  ...E...F...G......H...J......K...
+```
+So basically, you shift the bitblock, but the only bits you care about are the ones marked by the index, AND you only count a location as valid (ie. moving there is one shift) if it was marked by the index. Needless to say, this is not trivial.
+
+#### Current version
+
+The default IDISA implementation is a 59-line monstrosity that I'm going to avoid copying into here. There are efficient algorithms implemented in the AVX2 and SSE2 builders, but they are equally monstrous. To make matters worse, they make a *lot* of calls to other functions and basic IDISA operations.
+
+#### Our goal
+
+To make our version special, the goal is to utilize the enormous breadth of AVX-512 instructions to break some of those aforementioned numerous operations down to fewer instructions.
+
+#### Why we *don't* have a version yet
+
+So as you'd expect for a shifting operation, `bitblock_indexed_advance` makes a lot of calls to various shifting operations. In fact, a number of them seem to even be scalarized by the compiler. Because of this we had the idea to try improving one of the IDISA shift operations it uses a lot with a fun new intrinsic we discovered. Unfortunately this turned out to be a bad idea. But for that story, we must venture past the gates of HeLLVM...
+
+***
+
+## The LLVM Chronicles Pt.2: The Nine Circles of HeLLVM
 
 What started as quick detour to implement a single instruction version of `simd_srli` has turned into incredible journey through the depths of HeLLVM to uncover the mystical processes behind intrinsic implementation. So without further ado, our decent through the **Nine Circles of HeLLVM** starts as any other story does: with a naive curiosity straying a little deeper than it should've...
 
@@ -233,7 +280,7 @@ It was then that we entered **Anger**. We had discovered that for some reason, t
 ***
 #### Heresy, The Sixth Circle
 
-Before we knew it, we found ourselves in **Heresy**. It seems the LLVM develoers, thinking themselves clever, had created one of the grossest ways to generate dynamic code bodies that had ever been concieved. The file `Intrinsics.gen` is *over 100,000* lines long and contains a number of pre-processor `ifdef`'s. By defining a specific preprocessor variable and then including this monstorous file, they load just the specific parts they want. This is how the 6k+ intrinsics are loaded into their enum.
+Before we knew it, we found ourselves in **Heresy**. It seems the LLVM developers, thinking themselves clever, had created one of the grossest ways to generate dynamic code bodies that had ever been concieved. The file `Intrinsics.gen` is *over 100,000* lines long and contains a number of pre-processor `ifdef`'s. By defining a specific preprocessor variable and then including this monstorous file, they load just the specific parts they want. This is how the 6k+ intrinsics are loaded into their enum.
 
 | `Intrinsics.h`                                                                                                   | `Intrinsics.gen`                                                               |
 | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
@@ -277,13 +324,16 @@ That was when our journey came to an end. We found ourselves at the bottom of He
 
 As we climbed out of the deep hole we entered, we reflected on what we had learned. Even though we haven't conclusively shown that LLVM is at fault, something we're actively pursuing, there is strong evidence to suggest that this entire debacle is due to some small oversight in LLVM 3.8.0. While we can only hope that updating LLVM would indeed fix the issue, we have no guarantee. So for now, we'll try to nail down the issue and hopefully prevent anyone else from getting trapped in the deep, dark, endless hole that is **The Nine Circles of HeLLVM**.
 
-
-### For the future
-
-*What we're working on right now*
+***
+## For the future
 
 #### PExt and PDep
 
-[Useful intel intrinsics](https://software.intel.com/sites/landingpage/IntrinsicsGuide/#techs=AVX_512&text=extract)
 
-No work has been completed yet on PExt and PDep. Hope to have preliminary results next week.
+
+Currently no actual work has been done on either of PExt or PDep. But we have found a couple of [Useful intel intrinsics](https://software.intel.com/sites/landingpage/IntrinsicsGuide/#techs=AVX_512&text=extract) which will make things interesting. We hope to have something to show next time.
+
+#### Shufflevector
+
+This wasn't something we originally had put thought into, but we recently found a few quite interesting permute intrinsics which could allow for some very efficient shufflevector implementations. Let's hope we don't have another HeLLVM scenario with this one...
+
