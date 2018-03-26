@@ -54,7 +54,7 @@ switch (fw) {
 ````
 
 We are looking into a possible algorithm for field widths of 8 although it has
-yet to generate results.
+yet to produce results.
 
 ### The new stuff
 
