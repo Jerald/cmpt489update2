@@ -55,6 +55,8 @@ switch (fw) {
 
 We are currently looking into a possible algorithm for field widths of 8 although it has yet to yield results.
 
+***
+
 ## The new stuff
 
 ### Popcount
@@ -126,6 +128,8 @@ Our initial testing has shown roughly 2% gains in performance.
 #### Further improvements
 
 This algorithm can be simply, albeit tediously, modified for vectors of i32's, i16's and i8's. This would make it an all-around more efficient version of the LLVM implementation.
+
+***
 
 ### Bitblock advance with carry
 
