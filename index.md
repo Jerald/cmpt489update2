@@ -332,9 +332,11 @@ As we climbed out of the deep hole we entered, we reflected on what we had learn
 ***
 ## For the future
 
+#### *Not* `hsimd_signmask`
+
+We were sad to discover that our implementation of `hsimd_signmask` had absolutely zero improvement over the current one. From all the information we have available to us, it seems that the compiler is turning them into both the same assembly and the same IR.
+
 #### PExt and PDep
-
-
 
 Currently no actual work has been done on either of PExt or PDep. But we have found a couple of [Useful intel intrinsics](https://software.intel.com/sites/landingpage/IntrinsicsGuide/#techs=AVX_512&text=extract) which will make things interesting. We hope to have something to show next time.
 
