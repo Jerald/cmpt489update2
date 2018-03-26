@@ -192,6 +192,94 @@ In progress: implementing block-split algorithm and analyzing performance of int
 
 *Rant about the BS LLVM nonsense by Oscar*
 
+What started as quick detour to implement a single instruction version of `simd_srli` has turned into incredible journey through the depths of HeLLVM to uncover the mystical processes behind intrinsic implementation. So without further ado, our decent through the **Nine Circles of HeLLVM** starts as any other story does: with a naive curiosity straying a little deeper than it should've...
+
+***
+#### Limbo, The First Circle
+
+We first start in **Limbo**. For a project investigating instruction-specific intrinsics in LLVM, life is always in Limbo. We face a state of constant unknown where we never know if a instruction really exists or if LLVM is just laughing at us.
+
+***
+#### Lust, The Second Circle
+
+From there we decended to **Lust**. This is where the folly of man gets the best of us. One day, while browsing the Intel intrinsics of Limbo, we found this little gem:
+
+```
+__m512i _mm512_srl_epi16 (__m512i a, __m128i count)
+Instruction: vpsrlw
+CPUID Flags: AVX512BW
+    
+Shift packed 16-bit integers in a right by count while shifting in zeros,
+and store the results in dst.
+```
+We quickly realized that this is *exactly* the same operation as the IDISA `simd_srli`! With this new discovery, we quickly became overtaken by Lust, the overwhelming urge to put our discovery to use.
+
+***
+#### Gluttony, The Third Circle
+
+And that was where we fell into **Gluttony**. Normally, implementing a single-instruction override should be a piece of cake. We've already spent time figuring out the basic design needed, so it was just a matter of putting it all together. But just when we thought we'd succeeded, the glutton of LLVM reared its ugly head. *It just didn't work.*
+
+```
+icgrep ERROR: Cannot select: 0x37fd030: v32i16 = X86ISD::VSHLI 0x37f9120, Constant:i32<4>
+```
+***
+#### Greed, The Fourth Circle
+
+And before we could figure out why, we found ourselves already in **Greed**. With a little investigation, we discovered the glutton we'd faced: with so many features, there just isn't any documentation of anything that's happening in LLVM. The feature greed of the LLVM devs had condemned us, trapping us in a journey we'd never asked for. But we'd gotten this far, so we weren't going to stop.
+
+***
+#### Anger, The Fifth Circle
+
+It was then that we entered **Anger**. We had discovered that for some reason, the enum which contains all the LLVM Intrinsics seemingly doesn't contain ours. Or at least, its existance is nondeterministic. What we'd discovered is that the Intrinsic enum is created using preprocessor macros which "simply" insert *over 6000* lines of Intrinsics into the body of LLVM's `Intrinsics.h`. They do this via dark magic and the file `Intrinsics.gen`.
+
+***
+#### Heresy, The Sixth Circle
+
+Before we knew it, we found ourselves in **Heresy**. It seems the LLVM develoers, thinking themselves clever, had created one of the grossest ways to generate dynamic code bodies that had ever been concieved. The file `Intrinsics.gen` is *over 100,000* lines long and contains a number of pre-processor `ifdef`'s. By defining a specific preprocessor variable and then including this monstorous file, they load just the specific parts they want. This is how the 6k+ intrinsics are loaded into their enum.
+
+| `Intrinsics.h`                                                                                                   | `Intrinsics.gen`                                                               |
+| ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `#define GET_INTRINSIC_ENUM_VALUES`<br>`#include "llvm/IR/Intrinsics.gen"`<br>`#undef GET_INTRINSIC_ENUM_VALUES` | `#ifdef GET_INTRINSIC_ENUM_VALUES`<br>`<6000 lines of Intrinsics>`<br>`#endif` |
+
+***
+#### Violence, The Seventh Circle
+
+So now, we know how the Intrinsics are loaded and were even able to verify that ours does seem to exist there. So then, why doesn't it seem to exist? Before we could solve that problem, **Violence** reared its ugly head. Doing all this digging had inadvertantly opened *many* windows. Some were chrome tabs, some were new folders in VS Code. But together, they crashed our computer and set us back further than we'd like to admit.
+
+```
+  1  [||||||||||||||||||||||||||||||||                                                  46.6%]   
+  2  [||||||||||||||||||||||||||||||||||||||||                                          51.2%]    
+  3  [||||||||||||||||||||||||||||                                                      43.9%]   
+  4  [||||||||||||||||||||||||||||||||||||                                              50.1%]
+  Mem[||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||3.28G/3.43G]
+  Swp[||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||7.89G/8.00G]
+```
+Having a computer with minimal RAM is a sad existence :(
+
+***
+#### Fraud, The Eighth Circle
+
+After that little mishap, our journey continued. Figuring out what's wrong with our Intrinsic was the goal. But then, that we realized we'd entered **Fraud**. For all intents and purposes, our Intrinsic does exist in LLVM, so can we figure out what's broken? It exists in the Intrinsics list, our processor supports the instruction, there *seems* to be a pipeline for LLVM to compile the IR to asm. So then *why* does it not work? *Why* we asked, and an answer we were not given.
+
+***
+#### Treachery, The Ninth Circle
+
+That was when our journey came to an end. We found ourselves at the bottom of HeLLVM: **Treachery**. We took a step back and decided to try some finagling with google search terms to see if maybe, just *maybe*, we could finally find someone else tackling a similar issue. What we found was not the salvation we were looking for, in fact, it was nearly the opposite. Turns out, every reference we could find for this issue, albeit with different intrinsics, has turned out to be an actual bug in the LLVM compiler.
+
+| Error                                                                                     | Source                                                                                                                        |
+| ----------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `LLVM ERROR: Cannot select: intrinsic %llvm.x86.sse41.pblendvb`                           | [LLVM Toolchain Snapshot on Ubuntu Launchpad.](https://bugs.launchpad.net/ubuntu/+source/llvm-toolchain-snapshot/+bug/1389729) |
+| `LLVM ERROR: Cannot select: 0x46ca590: v16f32 = X86ISD::FMAXC undef:v16f32, undef:v16f32` | [LLVM Bugzilla. Report for AVX-512 / KNL bug.](https://bugs.llvm.org/show_bug.cgi?id=27588)                                    |
+| `LLVM ERROR: Cannot select: intrinsic %llvm.x86.avx512.rndscale.ss`                       | [LLVM Bugzilla. Report for seemingly broken unit test.](https://bugs.llvm.org/show_bug.cgi?id=20684)         <br> *Apparently the resolution to this bug was simply that they'd removed the Intrinsic. Not exactly a bode of confidence for us...*                  |
+
+
+
+***
+#### The End
+
+As we climbed out of the deep hole we entered, we reflected on what we had learned. Even though we haven't conclusively shown that LLVM is at fault, something we're actively pursuing, there is strong evidence to suggest that this entire debacle is due to some small oversight in LLVM 3.8.0. While we can only hope that updating LLVM would indeed fix the issue, we have no guarantee. So for now, we'll try to nail down the issue and hopefully prevent anyone else from getting trapped in the deep, dark, endless hole that is **The Nine Circles of HeLLVM**.
+
+
 ### For the future
 
 *What we're working on right now*
