@@ -127,13 +127,13 @@ Initial testing has shown roughly 2% gains in performance.
 
 Algorithm can be modified for vectors of i32's, i16's and i8's.
 
-#### Bitblock Advance With Carry
+#### Bitblock advance with carry
 
 ##### Purpose
 
 Long-stream addition (with carries) of 64 bit values.
 
-##### Algorithm
+##### Current algorithm
 
 ```
 std::pair<Value *, Value *> IDISA_AVX2_Builder::bitblock_add_with_carry(Value * e1, Value * e2, Value * carryin) {
@@ -169,7 +169,7 @@ std::pair<Value *, Value *> IDISA_AVX2_Builder::bitblock_add_with_carry(Value * 
 ##### Problems
 
 - No equivalent AVX-512 intrinsics have been found
-- Field width is 64, but value size is not set
+- Field width is 64, but value size is not fixed
 
 ##### Research
 
