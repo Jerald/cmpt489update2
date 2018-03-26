@@ -1,14 +1,12 @@
 # CMPT 489 AVX-512 Update 2
 
-### Since you last saw us...
+## Since you last saw us...
 
-*What's happened with what we talked about last time*
+Last time we showed off our updated `packh` and `packl` implementations. Since then, we've cleaned up our code and Dr. Cameron has added it to the main [icgrep svn repo](http://parabix.costar.sfu.ca/changeset/5931/icGREP/icgrep-devel).
 
-Last time we showed off our updated `packh` and `packl` implementations. Since then, we've cleaned up our code and Prof. Cameron has added it to the main [icgrep svn repo](http://parabix.costar.sfu.ca/changeset/5931/icGREP/icgrep-devel).
+Unfortunately, our implementation currently only supports field widths of 16. Although luckily, icgrep seems to almost exclusively use field widths of 16, so it doesn't cause much of an issue.
 
-Currently only supports field widths of 16.
-
-Existing algorithm can be extended to field widths of 32 and 64 with the following:
+Our existing algorithm can be extended to field widths of 32 and 64 with the following modifications:
 
 ````cpp
 const unsigned int field_count_16 = 64;
@@ -53,31 +51,31 @@ switch (fw) {
 }
 ````
 
-We are looking into a possible algorithm for field widths of 8 although it has
-yet to produce results.
+We are currently looking into a possible algorithm for field widths of 8 although it has yet to produce results.
 
-### The new stuff
+## The new stuff
 
-*Start with the things from Cole*
-#### Popcount
+### Popcount
 
-Default implementation:
+This is the current default IDISA_Builder implementation:
 
 ````cpp
-if (LLVM_UNLIKELY(fw < 8)) {
-    assert ("field width is less than 8" && false);
-    llvm::report_fatal_error("Unsupported field width: popcount " + std::to_string(fw));
+llvm::Value * simd_popcount(unsigned fw, llvm::Value * a) {
+    if (LLVM_UNLIKELY(fw < 8)) {
+        assert ("field width is less than 8" && false);
+        llvm::report_fatal_error("Unsupported field width: popcount " + std::to_string(fw));
+    }
+    return CreatePopcount(fwCast(fw, a));
 }
-return CreatePopcount(fwCast(fw, a));
 ````
 
-We had concerns that llvm may not be using the most efficient implementation.
+We had concerns that llvm may not be using the most efficient implementation so we decided to investigate some alternatives.
 
-##### Possible improvements
+#### Possible improvements
 
-[Intel's PopCount Intrinsics](https://software.intel.com/sites/landingpage/IntrinsicsGuide/#text=pop)
+Unfortunately, [Intel's popcount Intrinsics](https://software.intel.com/sites/landingpage/IntrinsicsGuide/#text=pop) for AVX-512 require the (grossly named) AVX512VPOPCNTDQ feature set. For some reason, this feature isn't on any processors except one very specific specialty set called Knight's Landing. They're not expected to hit mainstream processors until Ice Lake, two generations from now.
 
-[Solution we chose](https://en.wikipedia.org/wiki/Hamming_weight#Efficient_implementation)
+Because of this, we chose to implement a [specific well-known algorithm](https://en.wikipedia.org/wiki/Hamming_weight#Efficient_implementation) for computing popcount:
 
 ````cpp
 llvm::Value * IDISA_AVX512BW_Builder::simd_popcount(unsigned fw, llvm::Value * a){
@@ -119,17 +117,17 @@ llvm::Value * IDISA_AVX512BW_Builder::simd_popcount(unsigned fw, llvm::Value * a
     return IDISA_Builder::simd_popcount(fw, a);
 ````
 
-##### Results
+#### Results
 
-Initial testing has shown roughly 2% gains in performance.
+Our initial testing has shown roughly 2% gains in performance.
 
-##### Further improvements
+#### Further improvements
 
-Algorithm can be modified for vectors of i32's, i16's and i8's.
+This algorithm can be simply, albeit tediously, modified for vectors of i32's, i16's and i8's. This would make it an all-around more efficient version of the default IDISA implementation.
 
-#### Bitblock advance with carry
+### Bitblock advance with carry
 
-##### Purpose
+#### Purpose
 
 Long-stream addition (with carries) of 64 bit values.
 
