@@ -227,7 +227,7 @@ The default IDISA implementation is a 59-line monstrosity that I'm going to avoi
 
 #### Our goal
 
-To make our version special, the goal is to utilize the enormous breadth of AVX-512 instructions to break some of those aforementioned numerous operations down to fewer instructions.
+To make our version special, the goal is to utilize the enormous breadth of AVX-512 instructions to break some of those aforementioned numerous operations down to fewer instructions. Part of this involves also looking into a new novel algorithm for the operation. We have a few ideas but nothing conclusive yet.
 
 #### Why we *don't* have a version yet
 
@@ -335,5 +335,5 @@ Currently no actual work has been done on either of PExt or PDep. But we have fo
 
 #### Shufflevector
 
-This wasn't something we originally had put thought into, but we recently found a few quite interesting permute intrinsics which could allow for some very efficient shufflevector implementations. Let's hope we don't have another HeLLVM scenario with this one...
+This wasn't something we originally had put thought into, but we recently found a few [quite interesting permute intrinsics](https://software.intel.com/sites/landingpage/IntrinsicsGuide/#avx512techs=AVX512F,AVX512BW&expand=1252&text=permute) which could allow for some very efficient shufflevector implementations. Let's hope we don't have another HeLLVM scenario with this one...
 
