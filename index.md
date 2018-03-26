@@ -127,7 +127,66 @@ Initial testing has shown roughly 2% gains in performance.
 
 Algorithm can be modified for vectors of i32's, i16's and i8's.
 
-*Then go to the things Avery has been working on*
+#### Bitblock Advance With Carry
+
+##### Purpose
+
+Long-stream addition (with carries) of 64 bit values.
+
+##### Algorithm
+
+```
+std::pair<Value *, Value *> IDISA_AVX2_Builder::bitblock_add_with_carry(Value * e1, Value * e2, Value * carryin) {
+    // using LONG_ADD
+    Type * carryTy = carryin->getType();
+    if (carryTy == mBitBlockType) {
+        carryin = mvmd_extract(32, carryin, 0);
+    }
+    Value * carrygen = simd_and(e1, e2);
+    Value * carryprop = simd_or(e1, e2);
+    Value * digitsum = simd_add(64, e1, e2);
+    Value * digitcarry = simd_or(carrygen, simd_and(carryprop, CreateNot(digitsum)));
+    Value * carryMask = hsimd_signmask(64, digitcarry);
+    Value * carryMask2 = CreateOr(CreateAdd(carryMask, carryMask), carryin);
+    Value * bubble = simd_eq(64, digitsum, allOnes());
+    Value * bubbleMask = hsimd_signmask(64, bubble);
+    Value * incrementMask = CreateXor(CreateAdd(bubbleMask, carryMask2), bubbleMask);
+    Value * increments = esimd_bitspread(64,incrementMask);
+    Value * sum = simd_add(64, digitsum, increments);
+    Value * carry_out = CreateLShr(incrementMask, mBitBlockWidth / 64);
+    if (carryTy == mBitBlockType) {
+        carry_out = bitCast(CreateZExt(carry_out, getIntNTy(mBitBlockWidth)));
+    }
+    return std::pair<Value *, Value *>{carry_out, bitCast(sum)};
+}
+```
+
+##### Things to note
+
+- Many nested logical operations
+- Multiple layers of masks and bit manipulations
+
+##### Problems
+
+- No equivalent AVX-512 intrinsics have been found
+- Field width is 64, but value size is not set
+
+##### Research
+
+Idea: Optimize performance for value sizes that are multiples of 512.
+
+Drop-in replacements:
+
+- ```_mm512_and_epi64```, ```_mm512_mask_or_epi64```, ```_mm512_xor_epi64```
+
+Logical simplifications:
+
+- ```_mm512_andnot_epi64``` can combine conjunction and negation
+- Masked add intrinsics
+
+##### Current work
+
+In progress: implementing block-split algorithm and analyzing performance of intrinsic subtitutions.
 
 ### The LLVM Chronicles Pt.2: The Nine Circles of HeLLVM
 
